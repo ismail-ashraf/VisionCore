@@ -1,17 +1,17 @@
 from .anomaly_detector import detect_anomaly
 from .preprocessor import preprocess_image
+from vision_core.core.config import DEVICE
 
 
 class AnomalyDetector:
-    def __init__(self,model,category,memory_banks,thresholds):
+    def __init__(self,model,memory_banks,thresholds):
         self.model = model
-        self.category = category
         self.memory_banks = memory_banks
         self.thresholds = thresholds
-        self.device = 'cpu'
+        self.device = DEVICE
 
 
-    def predict(self,frame):
+    def predict(self,frame,category):
         image = preprocess_image(frame)
 
         image = image.to(self.device)
@@ -20,7 +20,7 @@ class AnomalyDetector:
             model= self.model,
             memory_banks=self.memory_banks,
             thresholds=self.thresholds,
-            category=self.category,
+            category=category,
             image=image,
             device=self.device
         )

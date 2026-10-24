@@ -1,22 +1,17 @@
-
 import threading
 import cv2
-
 from .buffer import _STOP, StreamingBuffer
-from vision_core.detection.detector import YOLODetector
+from vision_core.inference.dynamic_batcher import DynamicBatcher
 from vision_core.tracking.tracker import Tracker
 
 
 class StreamConsumer:
-    def __init__(
-        self,
-        buffer: StreamingBuffer,
-        yolo_detector: YOLODetector,
-    ):
+    def __init__(self,buffer: StreamingBuffer,batcher: DynamicBatcher,):
         self._buffer = buffer
-        self._yolo_detector = yolo_detector
+        self._batcher = batcher
         self._stop_event = threading.Event()
 
+        # Each stream has its own tracker.
         self._tracker = Tracker(
             max_distance=80.0,
             max_missed_frames=2,
@@ -35,13 +30,14 @@ class StreamConsumer:
                 if frame is _STOP:
                     break
 
-                detections = self._yolo_detector.predict(frame)
+                future = self._batcher.submit(frame)
+                detections = future.result()
+
                 tracks = self._tracker.update(detections)
 
                 display_frame = frame.copy()
 
                 for track in tracks:
-                    # Display only tracks matched in this frame
                     if not track.is_updated:
                         continue
 
@@ -79,6 +75,9 @@ class StreamConsumer:
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     self._stop_event.set()
                     break
+
+        except Exception as exc:
+            print(f"StreamConsumer error: {exc}")
 
         finally:
             cv2.destroyAllWindows()

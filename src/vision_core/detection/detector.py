@@ -1,3 +1,5 @@
+from unittest import result
+
 import cv2
 import torch
 from vision_core.detection.schema import Detection
@@ -44,6 +46,46 @@ class YOLODetector:
 
         except Exception as exc:
             raise RuntimeError("YOLO inference failed") from exc
+
+    def predict_batch(self,frames:list):
+        if frames is None or len(frames) == 0:
+            raise ValueError("Input frames is empty or None")
+        for frame in frames:
+            if frame is None or frame.size == 0:
+                raise ValueError("Input frame is empty or None")
+
+        try:
+            with torch.inference_mode():
+                results = self.model.predict(
+                    frames,
+                    conf=self.confidence_threshold,
+                    device=self.device,
+                    verbose=False
+                )
+
+            batch_detections = []
+
+            for frame in results:
+                detection = []
+                for box in frame.boxes:
+                    bbox = box.xyxy[0].tolist()
+                    class_id = int(box.cls[0].item())
+                    confidence = float(box.conf[0].item())
+                    class_name = frame.names[class_id]
+                    detection.append(
+                        Detection(
+                            bbox=bbox,
+                            class_id=class_id,
+                            confidence=confidence,
+                            class_name=class_name
+                        )
+                    )
+                batch_detections.append(detection)
+            return batch_detections
+
+        except Exception as exc:
+            raise RuntimeError("YOLO inference failed") from exc
+
 
     @staticmethod
     def draw_detections(frame, detections):

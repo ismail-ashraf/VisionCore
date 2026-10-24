@@ -1,4 +1,3 @@
-
 import numpy as np
 from vision_core.tracking.kalman_filter import KalmanFilter
 

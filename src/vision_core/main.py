@@ -13,6 +13,8 @@ from vision_core.streaming.producer import StreamProducer
 
 @asynccontextmanager
 async def lifespan(_:FastAPI):
+
+    print("App Started")
     #load anomaly model
     anomaly_model = load_model(
         VISIONCORE_MODEL_PATH
@@ -44,7 +46,7 @@ async def lifespan(_:FastAPI):
     buffer = StreamingBuffer()
 
     #video source
-    source = cv2.VideoCapture(0)
+    source = cv2.VideoCapture(r"C:\Users\iismmail\Downloads\pcb Assembly Channel line.mp4")
 
     if not source.isOpened():
         raise RuntimeError(
@@ -72,6 +74,7 @@ async def lifespan(_:FastAPI):
     consumer.stop()
     producer.stop()
     source.release()
+    print("App Ended")
 
 
 app = FastAPI(lifespan=lifespan)

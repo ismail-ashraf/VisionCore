@@ -1,9 +1,6 @@
 import torch
 import torch.nn.functional as f
 
-from vision_core.inference.preprocessor import preprocess_image
-
-
 def load_anomaly_detector(path:str):
     checkpoint = torch.load(
         path,

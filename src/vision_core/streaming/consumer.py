@@ -1,43 +1,48 @@
 import threading
-from .buffer import _STOP,StreamingBuffer
-from vision_core.inference.detector_consumer import AnomalyDetector
+import cv2
+from .buffer import _STOP, StreamingBuffer
 from vision_core.detection.detector import YOLODetector
 from vision_core.tracking.tracker import Tracker
-import cv2
 
 
 class StreamConsumer:
-    def __init__(self , buffer:StreamingBuffer,anomaly_detector:AnomalyDetector,yolo_detector:YOLODetector):
+    def __init__(self,buffer: StreamingBuffer,yolo_detector: YOLODetector,):
         self._buffer = buffer
-        self._anomaly_detector = anomaly_detector
         self._yolo_detector = yolo_detector
         self._stop_event = threading.Event()
-        self._thread = threading.Thread(
-            target=self._run,
-            name="stream-consumer"
-        )
 
         self._tracker = Tracker()
 
+        self._thread = threading.Thread(
+            target=self._run,
+            name="stream-consumer",
+        )
+
     def _run(self):
         try:
-            while not self._stop_event.is_set():
+            print("Consumer: thread started")
 
+            while not self._stop_event.is_set():
+                print("Consumer: waiting for frame")
                 frame = self._buffer.get_latest()
+                print(f"Consumer: got frame or STOP = {frame is _STOP}")
 
                 if frame is _STOP:
+                    print("Consumer: received STOP")
                     break
 
-                # 1. Detect vehicles using YOLO
+                print("Consumer: frame received", frame.shape)
+
                 detections = self._yolo_detector.predict(frame)
+                print(f"Consumer: YOLO returned {len(detections)} detections")
 
-                # 2. Track vehicles across frames
                 tracks = self._tracker.update(detections)
+                print(f"Consumer: Tracker returned {len(tracks)} tracks")
 
-                # 3. Copy the frame so we can draw on it
+                # 3. Copy frame for visualization
                 display_frame = frame.copy()
 
-                # 4. Draw bounding boxes and IDs
+                # 4. Draw bounding boxes and track IDs
                 for track in tracks:
                     x1, y1, x2, y2 = map(int, track.bbox)
 
@@ -46,7 +51,7 @@ class StreamConsumer:
                         (x1, y1),
                         (x2, y2),
                         (0, 255, 0),
-                        2
+                        2,
                     )
 
                     label = f"ID: {track.track_id}"
@@ -58,42 +63,20 @@ class StreamConsumer:
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.7,
                         (0, 255, 0),
-                        2
+                        2,
                     )
 
-                # 5. Display the tracking result
+                # 5. Display tracking result
                 cv2.imshow(
-                    "VisionCore - Vehicle Tracking",
-                    display_frame
+                    "VisionCore - YOLO Tracking",
+                    display_frame,
                 )
+                print("Consumer: imshow reached")
 
-                # Press Q to close the display
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     self._stop_event.set()
+                    print("Consumer: waitKey reached")
                     break
-
-                # 6. Keep the existing anomaly detection
-                for detection in detections:
-                    bbox = detection.bbox
-                    x1, y1, x2, y2 = map(int, bbox)
-
-                    category = detection.class_name
-                    crop = frame[y1:y2, x1:x2]
-
-                    if crop.size == 0:
-                        continue
-
-                    prediction, score = self._anomaly_detector.predict(
-                        crop,
-                        category
-                    )
-
-                    print(
-                        f"Category: {category} | "
-                        f"Confidence: {detection.confidence:.2f} | "
-                        f"Anomaly: {prediction} | "
-                        f"Score: {score}"
-                    )
 
         finally:
             cv2.destroyAllWindows()
@@ -104,4 +87,6 @@ class StreamConsumer:
     def stop(self):
         self._stop_event.set()
         self._buffer.stop_consumer()
-        self._thread.join()
+
+        if self._thread.is_alive():
+            self._thread.join()

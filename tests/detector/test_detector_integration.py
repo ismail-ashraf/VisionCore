@@ -14,7 +14,7 @@ from vision_core.detection.detector import YOLODetector
 def test_real_yolo_detector():
 
     image_path = Path(
-        r"C:\Users\abdel\Downloads\mvtec_5_categories\bottle\test\broken_large\000.png"
+        r"C:\Users\iismmail\Downloads\000.png"
     )
 
     frame = cv2.imread(str(image_path))

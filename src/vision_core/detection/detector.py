@@ -1,12 +1,10 @@
-
 import cv2
 import torch
-
 from vision_core.detection.schema import Detection
 
 
 class YOLODetector:
-    def __init__(self,model,confidence_threshold=0.5,device="cpu",):
+    def __init__(self,model,confidence_threshold=0.5,device="cuda",):
         self.model = model
         self.confidence_threshold = confidence_threshold
         self.device = device

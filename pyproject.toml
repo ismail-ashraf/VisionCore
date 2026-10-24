@@ -15,9 +15,9 @@ dependencies = [
     "pandas==3.1.0rc0",
     "pytest>=9.1.1",
     "python-dotenv>=1.2.3",
-    "torch>=2.13.0",
-    "torchaudio>=2.11.0",
-    "torchvision>=0.28.0",
+    "torch==2.11.0",
+    "torchaudio==2.11.0",
+    "torchvision==0.26.0",
     "ultralytics>=8.4.170",
     "uvicorn>=0.54.0",
 ]
@@ -30,11 +30,11 @@ requires = ["uv_build>=0.12.3,<0.13.0"]
 build-backend = "uv_build"
 
 [[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 
 [tool.uv.sources]
-torch = { index = "pytorch-cpu" }
-torchvision = { index = "pytorch-cpu" }
-torchaudio = { index = "pytorch-cpu" }
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+torchaudio = { index = "pytorch-cu128" }

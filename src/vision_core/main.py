@@ -8,33 +8,29 @@ from vision_core.detection.detector import YOLODetector
 from vision_core.inference.dynamic_batcher import DynamicBatcher
 from vision_core.streaming.display import DisplayManager
 from vision_core.streaming.manager import StreamManager
-
-
-CAMERA_SOURCES = {
-    "camera-1": r"C:\Users\iismmail\Downloads\Pothole video.mp4",
-    "camera-2": r"C:\Users\iismmail\Downloads\Pothole video.mp4",
-}
+from vision_core.api.routes.camera import router as camera_router
 
 
 async def display_loop(stream_manager, display_manager):
     while True:
         display_manager.show()
         cv2.waitKey(1)
+        display_manager.process_pending_closes()
 
-        closed_cameras = display_manager.get_closed_windows()
-
-        for camera_id in closed_cameras:
-            try:
-                stream_manager.stop_camera(camera_id)
-                print(f"Stopped camera: {camera_id}")
-            except ValueError:
-                pass
+        # closed_cameras = display_manager.get_closed_windows()
+        #
+        # for camera_id in closed_cameras:
+        #     try:
+        #         stream_manager.stop_camera(camera_id)
+        #         print(f"Stopped camera: {camera_id}")
+        #     except ValueError:
+        #         pass
 
         await asyncio.sleep(0.01)
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app: FastAPI):
     print("App Started")
 
     batcher = None
@@ -65,12 +61,7 @@ async def lifespan(_: FastAPI):
             display_manager=display_manager,
         )
 
-        # Add all configured cameras
-        for camera_id, source_url in CAMERA_SOURCES.items():
-            stream_manager.add_camera(
-                camera_id=camera_id,
-                source_url=source_url,
-            )
+        app.state.stream_manager = stream_manager
 
         # Run the display loop in the background
         display_task = asyncio.create_task(
@@ -109,3 +100,4 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(camera_router)

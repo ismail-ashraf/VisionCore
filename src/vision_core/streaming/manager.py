@@ -161,3 +161,18 @@ class StreamManager:
             raise RuntimeError(
                 f"Failed to stop {len(errors)} camera(s)"
             ) from errors[0]
+
+    def list_cameras(self):
+        with self._lock:
+            return [
+                {
+                    "camera_id": camera_id,
+                    "status": (
+                        "running"
+                        if camera["producer"]._thread.is_alive()
+                           and camera["consumer"]._thread.is_alive()
+                        else "stopped"
+                    ),
+                }
+                for camera_id, camera in self.cameras.items()
+            ]

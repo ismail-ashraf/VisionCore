@@ -13,12 +13,12 @@ class DynamicBatcher:
         self.stop_event = threading.Event()
         self.worker_thread = None
 
-    def submit(self, frame):
+    def submit(self,camera_id,frame):
         if self.stop_event.is_set():
             raise RuntimeError("DynamicBatcher is stopping")
 
         future = Future()
-        self.request_queue.put((frame, future))
+        self.request_queue.put((camera_id,frame, future))
 
         return future
 
@@ -48,25 +48,20 @@ class DynamicBatcher:
             return
 
         frames = []
-
         for request in batch:
-            frame = request[0]
-            frames.append(frame)
+            frames.append(request[1])
 
         try:
             batch_detections = self.detector.predict_batch(frames)
 
-            for index in range(len(batch)):
-                request = batch[index]
+            for index, request in enumerate(batch):
+                camera_id, frame, future = request
 
-                future = request[1]
                 detections = batch_detections[index]
-
                 future.set_result(detections)
 
         except Exception as exc:
-            for request in batch:
-                future = request[1]
+            for camera_id, frame, future in batch:
                 future.set_exception(exc)
 
     def _run(self):

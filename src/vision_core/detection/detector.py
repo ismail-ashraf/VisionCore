@@ -1,5 +1,3 @@
-from unittest import result
-
 import cv2
 import torch
 from vision_core.detection.schema import Detection

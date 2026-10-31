@@ -1,23 +1,45 @@
+import asyncio
 from contextlib import asynccontextmanager
 import cv2
 from fastapi import FastAPI
 from ultralytics import YOLO
-from vision_core.core.config import YOLO_MODEL_WEIGHTS,CONFIDENCE_THRESHOLD,DEVICE
+from vision_core.core.config import CONFIDENCE_THRESHOLD,DEVICE,YOLO_MODEL_WEIGHTS
 from vision_core.detection.detector import YOLODetector
 from vision_core.inference.dynamic_batcher import DynamicBatcher
-from vision_core.streaming.buffer import StreamingBuffer
-from vision_core.streaming.consumer import StreamConsumer
-from vision_core.streaming.producer import StreamProducer
+from vision_core.streaming.display import DisplayManager
+from vision_core.streaming.manager import StreamManager
+
+
+CAMERA_SOURCES = {
+    "camera-1": r"C:\Users\iismmail\Downloads\Pothole video.mp4",
+    "camera-2": r"C:\Users\iismmail\Downloads\Pothole video.mp4",
+}
+
+
+async def display_loop(stream_manager, display_manager):
+    while True:
+        display_manager.show()
+        cv2.waitKey(1)
+
+        closed_cameras = display_manager.get_closed_windows()
+
+        for camera_id in closed_cameras:
+            try:
+                stream_manager.stop_camera(camera_id)
+                print(f"Stopped camera: {camera_id}")
+            except ValueError:
+                pass
+
+        await asyncio.sleep(0.01)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     print("App Started")
 
-    source = None
-    producer = None
-    consumer = None
     batcher = None
+    stream_manager = None
+    display_task = None
 
     try:
         yolo_model = YOLO(YOLO_MODEL_WEIGHTS)
@@ -33,45 +55,56 @@ async def lifespan(_: FastAPI):
             max_batch_size=4,
             max_wait_ms=15,
         )
+
         batcher.start()
 
-        buffer = StreamingBuffer()
+        display_manager = DisplayManager()
 
-        source = cv2.VideoCapture(
-            r"C:\Users\iismmail\Downloads\Pothole video.mp4"
-        )
-
-        if not source.isOpened():
-            raise RuntimeError("Could Not Open Video Source")
-
-        producer = StreamProducer(
-            source=source,
-            buffer=buffer,
-        )
-
-        consumer = StreamConsumer(
-            buffer=buffer,
+        stream_manager = StreamManager(
             batcher=batcher,
+            display_manager=display_manager,
         )
 
-        producer.start()
-        consumer.start()
+        # Add all configured cameras
+        for camera_id, source_url in CAMERA_SOURCES.items():
+            stream_manager.add_camera(
+                camera_id=camera_id,
+                source_url=source_url,
+            )
+
+        # Run the display loop in the background
+        display_task = asyncio.create_task(
+            display_loop(
+                stream_manager=stream_manager,
+                display_manager=display_manager,
+            )
+        )
 
         yield
 
     finally:
-        if producer is not None:
-            producer.stop()
+        # Stop the display loop first
+        if display_task is not None:
+            display_task.cancel()
 
-        if consumer is not None:
-            consumer.stop()
+            try:
+                await display_task
+            except asyncio.CancelledError:
+                pass
+
+        # Stop all camera streams
+        if stream_manager is not None:
+            try:
+                stream_manager.stop_all()
+            except Exception as exc:
+                print(f"StreamManager shutdown error: {exc}")
+
+        # Stop the shared inference batcher
         if batcher is not None:
             batcher.stop()
 
-        if source is not None:
-            source.release()
-
         cv2.destroyAllWindows()
+
         print("App Ended")
 
 

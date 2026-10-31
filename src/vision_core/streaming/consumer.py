@@ -3,13 +3,16 @@ import cv2
 from .buffer import _STOP, StreamingBuffer
 from vision_core.inference.dynamic_batcher import DynamicBatcher
 from vision_core.tracking.tracker import Tracker
+from concurrent.futures import TimeoutError
 
 
 class StreamConsumer:
-    def __init__(self,buffer: StreamingBuffer,batcher: DynamicBatcher,):
+    def __init__(self,camera_id , buffer: StreamingBuffer,batcher: DynamicBatcher, display_manager):
+        self.camera_id = camera_id
         self._buffer = buffer
         self._batcher = batcher
         self._stop_event = threading.Event()
+        self._display_manager = display_manager
 
         # Each stream has its own tracker.
         self._tracker = Tracker(
@@ -30,8 +33,21 @@ class StreamConsumer:
                 if frame is _STOP:
                     break
 
-                future = self._batcher.submit(frame)
-                detections = future.result()
+                future = self._batcher.submit(
+                    camera_id=self.camera_id,
+                    frame=frame,
+                )
+
+                while not self._stop_event.is_set():
+                    try:
+                        detections = future.result(timeout=0.1)
+                        break
+
+                    except TimeoutError:
+                        continue
+
+                else:
+                    break
 
                 tracks = self._tracker.update(detections)
 
@@ -67,20 +83,13 @@ class StreamConsumer:
                         2,
                     )
 
-                cv2.imshow(
-                    "VisionCore - YOLO Tracking",
-                    display_frame,
+                self._display_manager.update(
+                    camera_id=self.camera_id,
+                    frame=display_frame,
                 )
-
-                if cv2.waitKey(1) & 0xFF == ord("q"):
-                    self._stop_event.set()
-                    break
 
         except Exception as exc:
             print(f"StreamConsumer error: {exc}")
-
-        finally:
-            cv2.destroyAllWindows()
 
     def start(self):
         self._thread.start()

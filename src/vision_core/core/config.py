@@ -33,3 +33,8 @@ if not DEVICE:
     raise ValueError(
         "DEVICE is missing from your .env file!"
     )
+
+YOLO_MODEL_WEIGHTS_ONNX = os.getenv("YOLO_MODEL_WEIGHTS_ONNX")
+
+if not YOLO_MODEL_WEIGHTS_ONNX:
+    raise ValueError("YOLO_MODEL_WEIGHTS_ONNX is missing from your .env file!")

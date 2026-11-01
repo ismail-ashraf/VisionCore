@@ -458,4 +458,130 @@ DEVICE=cuda
 
 **Important:** Never commit `.env` files, API credentials, local databases, or other sensitive configuration files to version control.
 
-### 4.
+### 4. Configure the Frontend
+
+Navigate to the frontend directory:
+
+```bash
+cd frontend
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Configure the backend API URL using the environment variable expected by the frontend.
+
+For example:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+### 5. Start the Backend
+
+Return to the project root and start the FastAPI application using the configured application entry point.
+
+For example, if the application entry point is `vision_core.main:app`:
+
+```bash
+uv run uvicorn vision_core.main:app --reload
+```
+
+### 6. Start the Frontend
+
+From the frontend directory:
+
+```bash
+npm run dev
+```
+
+The frontend development URL will be displayed in the terminal.
+
+### 7. Explore the API
+
+Open the interactive Swagger documentation:
+
+```text
+http://localhost:8000/docs
+```
+
+---
+
+## Running the Complete Application
+
+VisionCore consists of multiple components that communicate with each other during operation.
+
+| Component | Responsibility |
+|---|---|
+| FastAPI Backend | Handles API requests and system coordination |
+| React Frontend | Provides the monitoring and management interface |
+| YOLO Model | Performs object detection |
+| Stream Producer | Acquires frames from video sources |
+| Stream Consumer | Processes frames and coordinates inference |
+| Dynamic Batcher | Groups frames for inference |
+| Object Tracker | Maintains object identities across frames |
+| Metrics Collector | Collects performance information |
+| Drift Monitor | Monitors changes in incoming data |
+| SQLite | Stores supported local application metrics |
+
+Once the backend and frontend are running, users can register video sources and interact with the platform through the dashboard.
+
+---
+
+## API Capabilities
+
+The backend exposes REST API endpoints for interacting with the computer vision platform.
+
+| Capability | Description |
+|---|---|
+| Camera Management | Add, remove, and retrieve camera sources |
+| Video Streaming | Access processed camera frames |
+| Runtime Settings | Retrieve and update supported configuration parameters |
+| Monitoring | Access system and inference monitoring information |
+| Analytics | Retrieve collected analytics information |
+| System Logs | Access application logging information |
+
+The exact request and response schemas are available through the interactive API documentation.
+
+---
+
+## Design Goals
+
+VisionCore is built around the following engineering principles:
+
+- **Modular Architecture:** Separate video acquisition, inference, tracking, and monitoring responsibilities.
+- **Real-Time Processing:** Process continuous video streams through a dedicated pipeline.
+- **Multi-Camera Support:** Manage multiple video sources through a centralized backend.
+- **Efficient Inference:** Use dynamic batching to process multiple frames together.
+- **Runtime Configurability:** Update supported system parameters through APIs.
+- **Separation of Concerns:** Keep the frontend, API layer, and computer vision pipeline independently structured.
+- **Observability:** Provide metrics, analytics, logs, and monitoring interfaces.
+- **Extensibility:** Keep the detection pipeline structured to support compatible object detection models.
+
+---
+
+## Future Improvements
+
+Potential areas for further development include:
+
+- Additional object tracking improvements.
+- More advanced multi-camera coordination.
+- Expanded inference performance benchmarking.
+- Improved drift detection and alerting.
+- More detailed analytics and reporting.
+- Additional monitoring and observability capabilities.
+- Production deployment and infrastructure integration.
+- Support for additional compatible detection models.
+
+---
+
+## Author
+
+**Ismail Ashraf**
+
+---
+
+*VisionCore — Real-Time Vision. Centralized Monitoring. Intelligent Insights.*

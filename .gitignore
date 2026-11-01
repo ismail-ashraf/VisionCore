@@ -218,3 +218,23 @@ __marimo__/
 .streamlit/secrets.toml
 
 .idea/
+
+# IDE
+
+# Python
+.venv/
+*.py[cod]
+
+# Testingtests/
+
+# Local data and experiments
+data/
+runs/
+scripts/
+
+# Environment variables
+.env.*
+
+# ONNX profiling
+onnxruntime_profile__*.json
+tests/

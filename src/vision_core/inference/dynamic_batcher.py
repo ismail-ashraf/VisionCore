@@ -1,3 +1,4 @@
+
 import queue
 import threading
 from concurrent.futures import Future
@@ -7,8 +8,13 @@ import time
 class DynamicBatcher:
     def __init__(self, detector, max_batch_size=4, max_wait_ms=15):
         self.detector = detector
+
+        self._validate_settings(max_batch_size, max_wait_ms)
+
         self.max_batch_size = max_batch_size
         self.max_wait_seconds = max_wait_ms / 1000
+
+        self._settings_lock = threading.Lock()
 
         self.request_queue = queue.Queue()
         self.stop_event = threading.Event()
@@ -31,6 +37,59 @@ class DynamicBatcher:
         self._total_failed_frames = 0
         self._last_error = None
         self._last_error_at = None
+
+    @staticmethod
+    def _validate_settings(max_batch_size, max_wait_ms):
+        if (
+            isinstance(max_batch_size, bool)
+            or not isinstance(max_batch_size, int)
+            or max_batch_size <= 0
+        ):
+            raise ValueError(
+                "max_batch_size must be a positive integer"
+            )
+
+        if (
+            isinstance(max_wait_ms, bool)
+            or not isinstance(max_wait_ms, (int, float))
+            or max_wait_ms <= 0
+        ):
+            raise ValueError(
+                "max_wait_ms must be positive"
+            )
+
+    def update_settings(
+        self,
+        max_batch_size=None,
+        max_wait_ms=None,
+    ):
+        with self._settings_lock:
+            new_batch_size = (
+                self.max_batch_size
+                if max_batch_size is None
+                else max_batch_size
+            )
+
+            new_wait_ms = (
+                self.max_wait_seconds * 1000
+                if max_wait_ms is None
+                else max_wait_ms
+            )
+
+            self._validate_settings(
+                new_batch_size,
+                new_wait_ms,
+            )
+
+            self.max_batch_size = new_batch_size
+            self.max_wait_seconds = new_wait_ms / 1000
+
+    def _get_settings(self):
+        with self._settings_lock:
+            return (
+                self.max_batch_size,
+                self.max_wait_seconds,
+            )
 
     def submit(self, camera_id, frame):
         if self.stop_event.is_set():
@@ -55,9 +114,12 @@ class DynamicBatcher:
         batch = []
         start_time = time.monotonic()
 
-        while len(batch) < self.max_batch_size:
+        # Snapshot settings for this batch
+        max_batch_size, max_wait_seconds = self._get_settings()
+
+        while len(batch) < max_batch_size:
             elapsed = time.monotonic() - start_time
-            remaining = self.max_wait_seconds - elapsed
+            remaining = max_wait_seconds - elapsed
 
             if remaining <= 0:
                 break
@@ -97,6 +159,12 @@ class DynamicBatcher:
         try:
             batch_detections = self.detector.predict_batch(frames)
 
+            if len(batch_detections) != len(batch):
+                raise RuntimeError(
+                    "Detector returned a different number of results "
+                    "than the number of submitted frames"
+                )
+
             inference_time = time.perf_counter() - start_time
             latency_ms = inference_time * 1000
 
@@ -122,7 +190,8 @@ class DynamicBatcher:
                 self._last_error_at = time.time()
 
             for camera_id, frame, future, submitted_at in batch:
-                future.set_exception(exc)
+                if not future.done():
+                    future.set_exception(exc)
 
     def _run(self):
         while True:
@@ -143,6 +212,11 @@ class DynamicBatcher:
                 break
 
     def start(self):
+        if self.worker_thread is not None and self.worker_thread.is_alive():
+            raise RuntimeError("DynamicBatcher is already running")
+
+        self.stop_event.clear()
+
         self.worker_thread = threading.Thread(
             target=self._run,
             name="dynamic-batcher",
@@ -189,6 +263,10 @@ class DynamicBatcher:
             else 0.0
         )
 
+        with self._settings_lock:
+            max_batch_size = self.max_batch_size
+            max_wait_ms = self.max_wait_seconds * 1000
+
         return {
             "total_batches": total_batches,
             "total_frames": total_frames,
@@ -199,6 +277,8 @@ class DynamicBatcher:
             "last_wait_time_ms": last_wait_time_ms,
             "queue_size": self.request_queue.qsize(),
             "max_queue_size": max_queue_size,
+            "max_batch_size": max_batch_size,
+            "max_wait_ms": max_wait_ms,
 
             "errors": {
                 "total_errors": total_errors,

@@ -1,16 +1,33 @@
+
 import threading
 import cv2
+import time
+import logging
+
 from vision_core.inference.dynamic_batcher import DynamicBatcher
 from vision_core.streaming.buffer import StreamingBuffer
 from vision_core.streaming.producer import StreamProducer
 from vision_core.streaming.consumer import StreamConsumer
-import time
 
 
 class StreamManager:
-    def __init__(self, batcher: DynamicBatcher, display_manager):
+    def __init__(
+        self,
+        batcher: DynamicBatcher,
+        display_manager,
+        logger=None,
+        drift_window_size=1000,
+        drift_monitor_interval=30,
+    ):
         self._batcher = batcher
         self._display_manager = display_manager
+        self._logger = logger or logging.getLogger(
+            "vision_core.system_events"
+        )
+
+        self._drift_window_size = drift_window_size
+        self._drift_monitor_interval = float(drift_monitor_interval)
+
         self.cameras = {}
         self._starting_cameras = set()
         self._lock = threading.Lock()
@@ -55,11 +72,18 @@ class StreamManager:
                 buffer=buffer,
             )
 
+            # Read current drift settings
+            with self._lock:
+                drift_window_size = self._drift_window_size
+                drift_monitor_interval = self._drift_monitor_interval
+
             consumer = StreamConsumer(
                 camera_id=camera_id,
                 buffer=buffer,
                 batcher=self._batcher,
                 display_manager=self._display_manager,
+                drift_window_size=drift_window_size,
+                drift_monitor_interval=drift_monitor_interval,
             )
 
             # Start camera threads
@@ -68,6 +92,13 @@ class StreamManager:
 
             # Register camera only after successful startup
             with self._condition:
+                # Apply the latest settings in case they changed
+                # while this camera was starting.
+                consumer._drift_monitor.update_settings(
+                    window_size=self._drift_window_size,
+                    monitor_interval=self._drift_monitor_interval,
+                )
+
                 self.cameras[camera_id] = {
                     "source": source,
                     "buffer": buffer,
@@ -76,7 +107,23 @@ class StreamManager:
                     "drift_monitor": consumer._drift_monitor,
                 }
 
+            self._logger.info(
+                f"Camera {camera_id} connected successfully",
+                extra={
+                    "event": "CAMERA_CONNECTED",
+                    "camera_id": camera_id,
+                },
+            )
+
         except Exception:
+            self._logger.exception(
+                f"Failed to connect camera {camera_id}",
+                extra={
+                    "event": "CAMERA_CONNECTION_FAILED",
+                    "camera_id": camera_id,
+                },
+            )
+
             # Stop consumer if created
             if consumer is not None:
                 consumer.stop()
@@ -131,6 +178,14 @@ class StreamManager:
 
         # Keep the camera registered if cleanup failed
         if errors:
+            self._logger.error(
+                f"Failed to completely stop camera {camera_id}: {errors[0]}",
+                extra={
+                    "event": "CAMERA_STOP_FAILED",
+                    "camera_id": camera_id,
+                },
+            )
+
             raise RuntimeError(
                 f"Failed to completely stop camera {camera_id}"
             ) from errors[0]
@@ -140,6 +195,14 @@ class StreamManager:
         # Remove camera only after successful cleanup
         with self._lock:
             self.cameras.pop(camera_id, None)
+
+        self._logger.info(
+            f"Camera {camera_id} stopped successfully",
+            extra={
+                "event": "CAMERA_STOPPED",
+                "camera_id": camera_id,
+            },
+        )
 
     def stop_all(self):
 
@@ -178,6 +241,57 @@ class StreamManager:
                 }
                 for camera_id, camera in self.cameras.items()
             ]
+
+    def update_drift_settings(
+        self,
+        window_size=None,
+        monitor_interval=None,
+    ):
+        # Validate settings before applying any changes
+        if window_size is not None:
+            if (
+                isinstance(window_size, bool)
+                or not isinstance(window_size, int)
+                or window_size <= 0
+            ):
+                raise ValueError(
+                    "window_size must be a positive integer"
+                )
+
+        if monitor_interval is not None:
+            if (
+                isinstance(monitor_interval, bool)
+                or not isinstance(monitor_interval, (int, float))
+                or monitor_interval <= 0
+            ):
+                raise ValueError(
+                    "monitor_interval must be positive"
+                )
+
+        # Update manager settings and get current monitors
+        with self._lock:
+            if window_size is not None:
+                self._drift_window_size = window_size
+
+            if monitor_interval is not None:
+                self._drift_monitor_interval = float(
+                    monitor_interval
+                )
+
+            cameras = {
+                camera_id: camera["drift_monitor"]
+                for camera_id, camera in self.cameras.items()
+            }
+
+            current_window_size = self._drift_window_size
+            current_interval = self._drift_monitor_interval
+
+        # Update monitors outside the manager lock
+        for monitor in cameras.values():
+            monitor.update_settings(
+                window_size=current_window_size,
+                monitor_interval=current_interval,
+            )
 
     def get_drift_insights(self, camera_id=None):
 
@@ -270,3 +384,10 @@ class StreamManager:
 
     def get_inference_metrics(self):
         return self._batcher.get_metrics()
+
+    def get_camera_frame(self, camera_id):
+        with self._lock:
+            if camera_id not in self.cameras:
+                raise ValueError(f"Camera {camera_id} not found")
+
+        return self._display_manager.get_frame(camera_id)

@@ -1,5 +1,7 @@
+
 import threading
 import cv2
+
 from .buffer import _STOP, StreamingBuffer
 from vision_core.inference.dynamic_batcher import DynamicBatcher
 from vision_core.tracking.tracker import Tracker
@@ -8,13 +10,25 @@ from vision_core.monitoring.drift_monitor import DriftMonitor
 
 
 class StreamConsumer:
-    def __init__(self,camera_id , buffer: StreamingBuffer,batcher: DynamicBatcher, display_manager):
+    def __init__(
+        self,
+        camera_id,
+        buffer: StreamingBuffer,
+        batcher: DynamicBatcher,
+        display_manager,
+        drift_window_size=1000,
+        drift_monitor_interval=30,
+    ):
         self.camera_id = camera_id
         self._buffer = buffer
         self._batcher = batcher
         self._stop_event = threading.Event()
         self._display_manager = display_manager
-        self._drift_monitor = DriftMonitor(window_size=1000)
+
+        self._drift_monitor = DriftMonitor(
+            window_size=drift_window_size,
+            monitor_interval=drift_monitor_interval,
+        )
 
         # Each stream has its own tracker.
         self._tracker = Tracker(

@@ -4,6 +4,7 @@ from .buffer import _STOP, StreamingBuffer
 from vision_core.inference.dynamic_batcher import DynamicBatcher
 from vision_core.tracking.tracker import Tracker
 from concurrent.futures import TimeoutError
+from vision_core.monitoring.drift_monitor import DriftMonitor
 
 
 class StreamConsumer:
@@ -13,6 +14,7 @@ class StreamConsumer:
         self._batcher = batcher
         self._stop_event = threading.Event()
         self._display_manager = display_manager
+        self._drift_monitor = DriftMonitor(window_size=1000)
 
         # Each stream has its own tracker.
         self._tracker = Tracker(
@@ -37,6 +39,8 @@ class StreamConsumer:
                     camera_id=self.camera_id,
                     frame=frame,
                 )
+
+                self._drift_monitor.update(frame)
 
                 while not self._stop_event.is_set():
                     try:
@@ -92,6 +96,7 @@ class StreamConsumer:
             print(f"StreamConsumer error: {exc}")
 
     def start(self):
+        self._drift_monitor.start()
         self._thread.start()
 
     def stop(self):
@@ -100,3 +105,5 @@ class StreamConsumer:
 
         if self._thread.is_alive():
             self._thread.join()
+
+        self._drift_monitor.stop()

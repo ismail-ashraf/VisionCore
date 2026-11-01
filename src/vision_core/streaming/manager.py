@@ -7,7 +7,7 @@ from vision_core.streaming.consumer import StreamConsumer
 
 
 class StreamManager:
-    def __init__(self, batcher: DynamicBatcher,display_manager):
+    def __init__(self, batcher: DynamicBatcher, display_manager):
         self._batcher = batcher
         self._display_manager = display_manager
         self.cameras = {}
@@ -24,8 +24,8 @@ class StreamManager:
                 raise RuntimeError("StreamManager is shutting down")
 
             if (
-                    camera_id in self.cameras
-                    or camera_id in self._starting_cameras
+                camera_id in self.cameras
+                or camera_id in self._starting_cameras
             ):
                 raise ValueError(
                     f"Camera {camera_id} already exists or is starting"
@@ -72,8 +72,8 @@ class StreamManager:
                     "buffer": buffer,
                     "producer": producer,
                     "consumer": consumer,
+                    "drift_monitor": consumer._drift_monitor,
                 }
-
 
         except Exception:
             # Stop consumer if created
@@ -133,6 +133,7 @@ class StreamManager:
             raise RuntimeError(
                 f"Failed to completely stop camera {camera_id}"
             ) from errors[0]
+
         self._display_manager.remove(camera_id)
 
         # Remove camera only after successful cleanup
@@ -170,9 +171,49 @@ class StreamManager:
                     "status": (
                         "running"
                         if camera["producer"]._thread.is_alive()
-                           and camera["consumer"]._thread.is_alive()
+                        and camera["consumer"]._thread.is_alive()
                         else "stopped"
                     ),
                 }
                 for camera_id, camera in self.cameras.items()
             ]
+
+    def get_drift_insights(self, camera_id=None):
+
+        with self._lock:
+            if camera_id is not None:
+                camera = self.cameras.get(camera_id)
+
+                if camera is None:
+                    raise ValueError(
+                        f"Camera {camera_id} not found"
+                    )
+
+                cameras = {
+                    camera_id: camera["drift_monitor"]
+                }
+
+            else:
+                cameras = {
+                    cam_id: camera["drift_monitor"]
+                    for cam_id, camera in self.cameras.items()
+                }
+
+        insights = []
+
+        for cam_id, monitor in cameras.items():
+            report = monitor.get_latest_report()
+
+            insights.append({
+                "camera_id": cam_id,
+                "monitoring_status": (
+                    "ready" if report is not None else "collecting"
+                ),
+                "sample_count": monitor.sample_count,
+                "window_size": monitor.window_size,
+                "features": (
+                    report["features"] if report is not None else None
+                ),
+            })
+
+        return insights

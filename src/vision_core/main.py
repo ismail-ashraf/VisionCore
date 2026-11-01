@@ -9,6 +9,7 @@ from vision_core.inference.dynamic_batcher import DynamicBatcher
 from vision_core.streaming.display import DisplayManager
 from vision_core.streaming.manager import StreamManager
 from vision_core.api.routes.camera import router as camera_router
+from vision_core.api.routes.monitoring import router as monitoring_router
 
 
 async def display_loop(stream_manager, display_manager):
@@ -101,3 +102,4 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(camera_router)
+app.include_router(monitoring_router)

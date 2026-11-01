@@ -4,6 +4,7 @@ from vision_core.inference.dynamic_batcher import DynamicBatcher
 from vision_core.streaming.buffer import StreamingBuffer
 from vision_core.streaming.producer import StreamProducer
 from vision_core.streaming.consumer import StreamConsumer
+import time
 
 
 class StreamManager:
@@ -217,3 +218,55 @@ class StreamManager:
             })
 
         return insights
+
+    def get_camera_health(self):
+        with self._lock:
+            cameras = dict(self.cameras)
+
+        health = []
+
+        for camera_id, camera in cameras.items():
+            producer = camera["producer"]
+            consumer = camera["consumer"]
+
+            producer_health = producer.get_health()
+
+            producer_alive = producer._thread.is_alive()
+            consumer_alive = consumer._thread.is_alive()
+
+            last_frame_at = producer_health["last_frame_at"]
+
+            if not producer_alive:
+                status = "stopped"
+
+            elif not consumer_alive:
+                status = "degraded"
+
+            elif last_frame_at is None:
+                status = "starting"
+
+            else:
+                elapsed = time.time() - last_frame_at
+
+                if elapsed > 3:
+                    status = "stale"
+                else:
+                    status = "healthy"
+
+            health.append({
+                "camera_id": camera_id,
+                "health_status": status,
+                "last_frame_at": last_frame_at,
+                "seconds_since_last_frame": (
+                    round(time.time() - last_frame_at, 2)
+                    if last_frame_at is not None
+                    else None
+                ),
+                "producer_thread_alive": producer_alive,
+                "consumer_thread_alive": consumer_alive,
+            })
+
+        return health
+
+    def get_inference_metrics(self):
+        return self._batcher.get_metrics()

@@ -39,3 +39,29 @@ def get_camera_drift_insights(
         )
 
     return insights[0]
+
+@router.get("/system")
+def get_system_metrics(request: Request):
+
+    stream_manager = request.app.state.stream_manager
+
+    return stream_manager.get_inference_metrics()
+
+@router.get("/cameras/health")
+def get_camera_health(request: Request):
+    stream_manager = request.app.state.stream_manager
+
+    cameras = stream_manager.get_camera_health()
+
+    return {
+        "total_cameras": len(cameras),
+        "cameras": cameras,
+    }
+
+@router.get("/errors")
+def get_system_errors(request: Request):
+    stream_manager = request.app.state.stream_manager
+
+    metrics = stream_manager.get_inference_metrics()
+
+    return metrics["errors"]

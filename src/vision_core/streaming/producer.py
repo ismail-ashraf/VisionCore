@@ -8,6 +8,8 @@ class StreamProducer:
         self._source = source
         self._buffer = buffer
         self._stop_event = threading.Event()
+        self._last_frame_at = None
+        self._status = "starting"
 
         self._thread = threading.Thread(
             target=self._run,
@@ -36,6 +38,9 @@ class StreamProducer:
                     break
 
                 frames_read += 1
+                self._last_frame_at = time.time()
+                self._status = "running"
+
                 self._buffer.put(frame)
 
                 # Keep file playback close to its original frame rate.
@@ -52,6 +57,10 @@ class StreamProducer:
         finally:
             print(f"Producer: total frames read = {frames_read}")
             print("Producer: closing buffer now")
+
+            if self._status != "stopped":
+                self._status = "stopped"
+
             self._buffer.close()
 
     def start(self):
@@ -67,3 +76,9 @@ class StreamProducer:
 
     def join(self):
         self._thread.join()
+
+    def get_health(self):
+        return {
+            "status": self._status,
+            "last_frame_at": self._last_frame_at,
+        }
